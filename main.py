@@ -15,11 +15,13 @@ def prove_connectivity(inp_cfg, use_alt_host=False):
     try:
         opc.connect()
 
-        result_1 = opc.get_value(inp_cfg["TEST_PATH_1"])
+        result_1 = opc.get_datapoint(inp_cfg["TEST_PATH_1"])
         print(result_1)
+        print(repr(result_1))
 
-        result_2 = opc.get_value(inp_cfg["TEST_PATH_2"])
+        result_2 = opc.get_datapoint(inp_cfg["TEST_PATH_2"])
         print(result_2)
+        print(repr(result_2))
 
     except Exception as e:
         print("Exception encountered: " + str(e))

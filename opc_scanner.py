@@ -1,8 +1,40 @@
-import logging
+import datetime
 import OpenOPC
 
 
+class DataPoint:
+    conn_status = {
+        -3: 'External reference not resolved',
+        -2: 'Parameter not configured',
+        -1: 'Module not configured',
+        0: 'Good',
+        1: 'Not communicating',
+    }
+
+    def __init__(self, name, canonical_datatype, value, quality, timestamp, conn_status_int):
+        self.name = name
+        self.canonical_datatype = canonical_datatype
+        self.value = value
+        self.quality = quality
+        self.timestamp = datetime.datetime.strptime(timestamp[:-6], "%Y-%m-%d %H:%M:%S")
+        self.conn_status_int = conn_status_int
+
+    @property
+    def conn_status_str(self):
+        return DataPoint.conn_status[self.conn_status_int]
+
+    def __str__(self):
+        """Short-hand access to name:value pair"""
+        return f"{self.name}: {self.value}"
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.name!r}, {self.canonical_datatype!r}, {self.value!r}, " \
+               f"{self.quality!r}, {self.timestamp!r}, {self.conn_status_int!r})"
+
+
 class OPCScanner:
+    MAX_RETRIES = 500
+
     def __init__(self, opc_host):
         self.client = OpenOPC.client(client_name="PyOPC")
         self.opc_host = opc_host
@@ -23,15 +55,13 @@ class OPCScanner:
         except NameError:
             pass  # No need to attempt to close if opc object never created.
 
-    def get_value(self, path, max_retries=500):
+    def get_datapoint(self, path):
         """Retrieve a single value for an OPC path."""
-        retries = max_retries
+        retries = self.MAX_RETRIES
         exc_for_return = None
         while retries > 0:
-            logging.debug(f"Retries: {retries}")
             try:
                 properties = self.client.properties(path)
-                logging.debug(f"Properties: {str(properties)}")
                 good = False
                 for prop in properties:
                     # SCAN PROPERTIES, LOOKING FOR ITEM QUALITY == GOOD
@@ -41,11 +71,14 @@ class OPCScanner:
                         else:
                             retries -= 1  # Should not occur, but had to include.
                 if good:
-                    for prop in properties:
-                        if str(prop[1]) == 'Item Value':
-                            return str(prop[2])
-                    retries -= 1  # NEVER FOUND 'Item Value'
-                    exc_for_return = "Didn't find 'Item Value' on final pass"
+                    return DataPoint(
+                        name=properties[0][2],
+                        canonical_datatype=properties[1][2],
+                        value=properties[2][2],
+                        quality=properties[3][2],
+                        timestamp=properties[4][2],
+                        conn_status_int=properties[9][2]
+                    )
                 else:  # 'Item Quality' EITHER NEVER FOUND, OR FOUND TO BE BAD
                     retries -= 1
                     exc_for_return = "Item quality not good on final pass"
