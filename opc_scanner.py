@@ -88,7 +88,7 @@ class OPCScanner:
                     exc_for_return = "Item quality not good on final pass"
 
             except Exception as exc:
-                logging.debug(exc)
+                logging.info(exc)
                 retries -= 1
                 exc_for_return = exc
 
