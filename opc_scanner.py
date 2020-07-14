@@ -11,13 +11,14 @@ class DataPoint:
         1: 'Not communicating',
     }
 
-    def __init__(self, name, canonical_datatype, value, quality, timestamp, conn_status_int):
+    def __init__(self, name, canonical_datatype, value, quality, timestamp, conn_status_int, required_attempts):
         self.name = name
         self.canonical_datatype = canonical_datatype
         self.value = value
         self.quality = quality
         self.timestamp = datetime.datetime.strptime(timestamp[:-6], "%Y-%m-%d %H:%M:%S")
         self.conn_status_int = conn_status_int
+        self.required_attempts = required_attempts
 
     @property
     def conn_status_str(self):
@@ -29,7 +30,7 @@ class DataPoint:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name!r}, {self.canonical_datatype!r}, {self.value!r}, " \
-               f"{self.quality!r}, {self.timestamp!r}, {self.conn_status_int!r})"
+               f"{self.quality!r}, {self.timestamp!r}, {self.conn_status_int!r}, {self.required_attempts!r})"
 
 
 class OPCScanner:
@@ -77,7 +78,8 @@ class OPCScanner:
                         value=properties[2][2],
                         quality=properties[3][2],
                         timestamp=properties[4][2],
-                        conn_status_int=properties[9][2]
+                        conn_status_int=properties[9][2],
+                        required_attempts=self.MAX_RETRIES + 1 - retries
                     )
                 else:  # 'Item Quality' EITHER NEVER FOUND, OR FOUND TO BE BAD
                     retries -= 1
