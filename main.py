@@ -16,15 +16,15 @@ def prove_connectivity(inp_cfg, use_alt_host=False):
         opc.connect()
 
         result_1 = opc.get_datapoint(inp_cfg["TEST_PATH_1"])
-        print(result_1)
-        print(repr(result_1))
+        logging.debug(result_1)
+        logging.debug(repr(result_1))
 
         result_2 = opc.get_datapoint(inp_cfg["TEST_PATH_2"])
-        print(result_2)
-        print(repr(result_2))
+        logging.debug(result_2)
+        logging.debug(repr(result_2))
 
     except Exception as e:
-        print("Exception encountered: " + str(e))
+        logging.exception("Exception encountered: " + str(e))
         traceback.print_exc()
 
     finally:
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         cfg = json.load(fp)
 
     if not cfg:
-        print("Could not load configuration from 'cfg.json'. Exiting.")
+        logging.error("Could not load configuration from 'cfg.json'. Exiting.")
         sys.exit()
 
     prove_connectivity(cfg, use_alt_host=False)

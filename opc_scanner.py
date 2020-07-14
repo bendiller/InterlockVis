@@ -1,4 +1,5 @@
 import datetime
+import logging
 import OpenOPC
 
 
@@ -43,16 +44,17 @@ class OPCScanner:
     def connect(self):
         try:
             self.client.connect(opc_server='OPC.DeltaV.1', opc_host=self.opc_host)
-            print("Achieved successful connection to DeltaV OPC server")
-            print(self.client.info())
+            logging.debug("Achieved successful connection to DeltaV OPC server")
+            logging.debug(self.client.info())
 
         except OpenOPC.OPCError as e:
-            print("Could not connect: " + str(e))
+            logging.error("Could not connect: " + str(e))
             raise e
 
     def close(self):
         try:
             self.client.close()
+            logging.debug("Closed connection to DeltaV OPC server")
         except NameError:
             pass  # No need to attempt to close if opc object never created.
 
@@ -86,7 +88,7 @@ class OPCScanner:
                     exc_for_return = "Item quality not good on final pass"
 
             except Exception as exc:
-                # logging.exception(exc)
+                logging.debug(exc)
                 retries -= 1
                 exc_for_return = exc
 
