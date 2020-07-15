@@ -45,9 +45,3 @@ class Interlock:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name!r}, {self.components!r}, {self.desc!r})"
-
-# Another possible way to organize this would be, rather than giving each a name that links them, to instead package
-# them together into a single object, containing a primary indication and a surrogate indication. And then even a step
-# higher, an Interlock would contain these objects and have all the information within it. Which probably makes sense
-# because the surrogate indication really depends on the test. For HS_525069 test, CA170's surrogate is actually the
-# HS_525069_LOGIC/AND_9/IN_D6 parameter which I'd force during pre-test if CA170 is offline. I think.
