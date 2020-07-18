@@ -1,5 +1,7 @@
+from collections import deque
 import datetime
 import logging
+
 import OpenOPC
 
 
@@ -36,10 +38,19 @@ class DataPoint:
 
 class OPCScanner:
     MAX_RETRIES = 500
+    MAX_HB_DELTA = 5  # Seconds beyond which an unchanged heartbeat value indicates stale communications
 
-    def __init__(self, opc_host):
+    def __init__(self, conn_cfg, use_alt_host=False):
+        if use_alt_host:
+            self.opc_host = conn_cfg["OPC_HOST_ALT"]
+        else:
+            self.opc_host = conn_cfg["OPC_HOST"]
         self.client = OpenOPC.client(client_name="PyOPC")
-        self.opc_host = opc_host
+        self.landmark_path = conn_cfg["LANDMARK_PATH"]  # Path to known/expected value, for health checks
+        self.expected_landmark_val = conn_cfg["EXPECTED_LANDMARK_VAL"]  # Value to compare landmark observation against
+        self.heartbeat_path = conn_cfg["HEARTBEAT_PATH"] # Path to constantly changing value, for health checks
+        self.landmark_val = None
+        self.heartbeat_vals = deque(maxlen=2)
 
     def connect(self):
         try:
@@ -95,3 +106,32 @@ class OPCScanner:
         if "OLE error 0xc0040007" in str(exc_for_return):
             exc_for_return = "DoesNotExist"
         return exc_for_return  # DEPLETED ALL RETRIES - UNSUCCESSFUL SCAN
+
+    def update_integrity_markers(self):
+        """
+        Record results of scanning a path with a known/expected value, and a path known/expected to change constantly.
+        Intended to be run cyclically by outer program loop to provide up-to-date assessment of communications health.
+        """
+        self.landmark_val = self.get_datapoint(self.landmark_path)
+        current_heartbeat = self.get_datapoint(self.heartbeat_path)
+        if current_heartbeat != self.heartbeat_vals[-1]:  # Record new reading only on change
+            self.heartbeat_vals.append(current_heartbeat)
+
+    def get_comms_integrity(self):
+        landmark_result = self.landmark_val == self.expected_landmark_val
+        heartbeat_delta = (self.heartbeat_vals[-1].timestamp - self.heartbeat_vals[0]).seconds
+        heartbeat_result = heartbeat_delta <= self.MAX_HB_DELTA
+
+        result, status_text = True, ''
+        if landmark_result and heartbeat_result:
+            status_text += 'Good'
+
+        if not landmark_result:
+            result = False
+            status_text += f"| Bad landmark - expected {self.expected_landmark_val}, got {landmark_result}"
+
+        if not heartbeat_result:
+            result = False
+            status_text += f"| Bad heartbeat - delta: {heartbeat_delta} seconds"
+
+        return result, status_text
