@@ -1,5 +1,5 @@
 from collections import deque
-import datetime
+from datetime import datetime, timedelta
 import logging
 
 import OpenOPC
@@ -19,7 +19,7 @@ class DataPoint:
         self.canonical_datatype = canonical_datatype
         self.value = value
         self.quality = quality
-        self.timestamp = datetime.datetime.strptime(timestamp[:-6], "%Y-%m-%d %H:%M:%S")
+        self.timestamp = datetime.strptime(timestamp[:-6], "%Y-%m-%d %H:%M:%S") - timedelta(hours=6)  # Adjust for TZ
         self.conn_status_int = conn_status_int
         self.required_attempts = required_attempts
 
@@ -39,6 +39,7 @@ class DataPoint:
 class OPCScanner:
     MAX_RETRIES = 500
     MAX_HB_DELTA = 5  # Seconds beyond which an unchanged heartbeat value indicates stale communications
+    HEARTBEAT_UPDATE_RATE = 2  # Interval (in seconds) at which the configured heartbeat signal updates
 
     def __init__(self, conn_cfg, use_alt_host=False):
         if use_alt_host:
@@ -48,9 +49,11 @@ class OPCScanner:
         self.client = OpenOPC.client(client_name="PyOPC")
         self.landmark_path = conn_cfg["LANDMARK_PATH"]  # Path to known/expected value, for health checks
         self.expected_landmark_val = conn_cfg["EXPECTED_LANDMARK_VAL"]  # Value to compare landmark observation against
-        self.heartbeat_path = conn_cfg["HEARTBEAT_PATH"] # Path to constantly changing value, for health checks
+        self.heartbeat_path = conn_cfg["HEARTBEAT_PATH"]  # Path to constantly changing value, for health checks
         self.landmark = None
         self.heartbeats = deque(maxlen=2)
+        self.aliasing_possible = False  # Indicates if heartbeat scan is too slow and could alias signal
+        self.last_integrity_timestamp = None
 
     def connect(self):
         try:
@@ -111,17 +114,39 @@ class OPCScanner:
         """
         Record results of scanning a path with a known/expected value, and a path known/expected to change constantly.
         Intended to be run cyclically by outer program loop to provide up-to-date assessment of communications health.
+
+        NOTE: Must be run at least 2x as fast as heartbeat signal changes, to prevent signal aliasing. Currently
+        selected heartbeat changes every 2 sec, so this must be run at least every second.
         """
+
+        # Capture current values:
         self.landmark = self.get_datapoint(self.landmark_path)
         current_heartbeat = self.get_datapoint(self.heartbeat_path)
+
+        # Determine whether scan rate is fast enough to prevent aliasing:
+        now = datetime.now()
+        if self.last_integrity_timestamp is not None:
+            self.aliasing_possible = (now - self.last_integrity_timestamp).seconds > (self.HEARTBEAT_UPDATE_RATE/2)
+        self.last_integrity_timestamp = now
+
+        # Update heartbeat deque:
         if len(self.heartbeats) < 2 or current_heartbeat.value != self.heartbeats[-1].value:  # Only record on change
             self.heartbeats.append(current_heartbeat)
 
     def get_comms_integrity(self):
-        # TODO - need to thoroughly evaluate the ways heartbeat stuff can fail
-        landmark_result = self.landmark.value == self.expected_landmark_val
+        # Landmark indicates problem if value doesn't match expectation, or if landmark is of type OPCError
+        landmark_result = (
+            type(self.landmark) is not OpenOPC.OPCError and
+            self.landmark.value == self.expected_landmark_val
+        )
         heartbeat_delta = (self.heartbeats[-1].timestamp - self.heartbeats[0].timestamp).seconds
-        heartbeat_result = heartbeat_delta <= self.MAX_HB_DELTA
+        present_delta = (datetime.now() - self.heartbeats[-1].timestamp).seconds
+        heartbeat_result = (
+                len(self.heartbeats) > 1 and
+                self.heartbeats[0].value != self.heartbeats[1].value and
+                heartbeat_delta <= self.MAX_HB_DELTA and
+                present_delta <= self.MAX_HB_DELTA
+        )
 
         result, status_text = True, ''
         if landmark_result and heartbeat_result:
@@ -133,6 +158,6 @@ class OPCScanner:
 
         if not heartbeat_result:
             result = False
-            status_text += f"| Bad heartbeat - delta: {heartbeat_delta} seconds"
+            status_text += f"| Bad heartbeat - heartbeat deltas: {heartbeat_delta} & {present_delta} seconds"
 
         return result, status_text
