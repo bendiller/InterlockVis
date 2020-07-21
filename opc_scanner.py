@@ -139,14 +139,23 @@ class OPCScanner:
             type(self.landmark) is not OpenOPC.OPCError and
             self.landmark.value == self.expected_landmark_val
         )
+
+        # Calculate time deltas
         heartbeat_delta = (self.heartbeats[-1].timestamp - self.heartbeats[0].timestamp).seconds
         present_delta = (datetime.now() - self.heartbeats[-1].timestamp).seconds
-        heartbeat_result = (
-                len(self.heartbeats) > 1 and
-                self.heartbeats[0].value != self.heartbeats[1].value and
-                heartbeat_delta <= self.MAX_HB_DELTA and
-                present_delta <= self.MAX_HB_DELTA
-        )
+
+        try:  # Reveal cases where only first 1 or first 2 heartbeats have been collected
+            enough_heartbeats = self.heartbeats[0].value != self.heartbeats[1].value
+        except IndexError:
+            enough_heartbeats = False
+
+        # Create simple matrix of statuses of various heartbeat failure modes paired with explanatory text:
+        heartbeat_statuses = [
+            (enough_heartbeats, f"- insufficient heartbeats collected ({len(self.heartbeats)}"),
+            (heartbeat_delta <= self.MAX_HB_DELTA, f"- too long between changing heartbeat values {heartbeat_delta}"),
+            (present_delta <= self.MAX_HB_DELTA, f"- too long since last recorded heartbeat values {present_delta}")
+        ]
+        heartbeat_result = all([cond[0] for cond in heartbeat_statuses])
 
         result, status_text = True, ''
         if landmark_result and heartbeat_result:
@@ -158,6 +167,6 @@ class OPCScanner:
 
         if not heartbeat_result:
             result = False
-            status_text += f"| Bad heartbeat - heartbeat deltas: {heartbeat_delta} & {present_delta} seconds"
+            status_text += '| Bad heartbeat ' + ''.join([cond[1] for cond in heartbeat_statuses if not cond[0]])
 
         return result, status_text
