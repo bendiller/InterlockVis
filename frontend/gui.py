@@ -8,6 +8,7 @@ import PySimpleGUI as sg
 
 import jsonizer
 from opc_scanner import OPCScanner
+from frontend.styling import MAIN_WIDTH, style_args
 
 
 def scan_opc(thread_name, run_freq, window, conn_cfg):
@@ -45,14 +46,16 @@ class Gui:
         self.layout = self.build_layout()
 
     def build_layout(self):
-        ilock_rows = [[sg.Text(text=self.interlock.name, font='Any 18', key='ilock_name')],]
+        # ilock_rows = [[sg.Text(text=self.interlock.name, font='Any 18', key='ilock_name')],]
+        ilock_rows = list()
+        ilock_rows.append([sg.Text(text=self.interlock.name, key='ilock_name', **style_args(self.interlock, 'name')), ])
         for comp in self.interlock.components:
-            ilock_rows.append([sg.Text(text=comp.name, font='Any 12', key=comp.name)])
-            ilock_rows.append([sg.Text(text=comp.desc, font='Any 10', key=comp.desc)])
+            ilock_rows.append([sg.Text(text=comp.name, key=comp.name, **style_args(comp, 'name')), ])
+            ilock_rows.append([sg.Text(text=comp.desc, key=comp.desc, **style_args(comp, 'desc')), ])
 
         return [
             *ilock_rows,
-            [sg.Multiline(size=(40, 26), key='-ML-', autoscroll=True)],
+            [sg.Multiline(size=(MAIN_WIDTH*2, 26), key='-ML-', autoscroll=True)],
             [sg.Button('Exit')],
         ]
 

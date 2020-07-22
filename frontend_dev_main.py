@@ -1,5 +1,5 @@
 import logging
-from gui import Gui
+from frontend.gui import Gui
 
 
 if __name__ == "__main__":
