@@ -59,7 +59,7 @@ class OPCScanner:
         try:
             self.client.connect(opc_server='OPC.DeltaV.1', opc_host=self.opc_host)
             logging.info("Achieved successful connection to DeltaV OPC server")
-            logging.info(self.client.info())
+            logging.debug(self.client.info())
 
         except OpenOPC.OPCError as e:
             logging.error("Could not connect: " + str(e))
