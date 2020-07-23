@@ -30,17 +30,21 @@ def scan_opc(thread_name, run_freq, window, conn_cfg, logger):
 
 class Gui:
     def __init__(self, conn_cfg_path, interlock_cfg_path):
+        error_status = ''
         try:
             with open(conn_cfg_path, 'r') as fp:
                 self.conn_cfg = json.load(fp)
-            self.interlock = jsonizer.read_file(interlock_cfg_path)
-
         except Exception as e:
-            logging.debug(f"Exception loading configuration files: {e}")  # TODO - Must be addressed before moving on
-            self.conn_cfg = None
+            error_status += f"\nError loading connection configuration:\n{e}\n"
 
-        if not self.conn_cfg:
-            logging.error("Could not load connection configuration from JSON - cannot continue.")  # TODO - Must be addressed before moving on
+        try:
+            self.interlock = jsonizer.read_file(interlock_cfg_path)
+        except Exception as e:
+            error_status += f"\nError loading interlock configuration:\n{e}\n"
+
+        if error_status != '':
+            # Program cannot continue without valid configuration. Create a pop-up explaining, and exit after.
+            sg.popup_error(f"Failed to load configuration - program must exit. Details:\n{error_status}")
             sys.exit()
 
         self.logger = None  # Can only be set after Window object exists
