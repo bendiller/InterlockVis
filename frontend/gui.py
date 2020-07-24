@@ -47,15 +47,17 @@ class Gui:
             sg.popup_error(f"Failed to load configuration - program must exit. Details:\n{error_status}")
             sys.exit()
 
-        self.logger = None  # Can only be set after Window object exists
         self.layout = self.build_layout()
+        self.window = sg.Window('Interlock Visualizer', self.layout, finalize=True)
+        self.logger = self.configure_logger()
 
-    def configure_logger(self, window):
-        self.logger = logging.getLogger()
-        self.logger.setLevel(logging.INFO)
-        gui_handler = GuiHandler(logging.INFO, window.write_event_value)
+    def configure_logger(self):
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        gui_handler = GuiHandler(logging.INFO, self.window.write_event_value)
         gui_handler.setFormatter(gui_log_formatter)
-        self.logger.addHandler(gui_handler)
+        logger.addHandler(gui_handler)
+        return logger
 
     def build_layout(self):
         ilock_rows = list()
@@ -78,16 +80,17 @@ class Gui:
             args=('MainWorker', 2000, window, self.conn_cfg, self.logger),
             daemon=True
         ).start()
-
-        sg.cprint_set_output_destination(window, '-ML-')
+        sg.cprint_set_output_destination(self.window, '-ML-')
 
         while True:
-            event, values = window.read()
-            if event == '-LOG-':
+            event, values = self.window.read()
+            if event in (sg.WIN_CLOSED, 'Exit'):
+                break
+            elif event == '-LOG-':
                 sg.cprint(values[event])
             elif event in (sg.WIN_CLOSED, 'Exit'):
                 break
             else:
                 sg.cprint(event, values[event])  # This is where the GUI is updated with return info from thread
 
-        window.close()
+        self.window.close()
