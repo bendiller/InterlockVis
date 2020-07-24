@@ -26,6 +26,5 @@ styles = {
         'size': (MAIN_WIDTH, 1),
     },
     'Component.name': {'font': 'Any 12', },
-    'Component.desc': {'font': 'Any 10', },
-
+    'Component.desc': {'font': 'Any 12', },
 }
