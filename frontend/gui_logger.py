@@ -14,4 +14,4 @@ class GuiHandler(logging.Handler):
         super().__init__(level)
 
     def emit(self, record):
-        self.window_writer('-LOG-', f"{self.format(record)}\n")
+        self.window_writer('-LOG-', f"{self.format(record)}")
