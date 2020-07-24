@@ -6,9 +6,9 @@ import time
 
 import PySimpleGUI as sg
 
-from interlock import Indication
 import jsonizer
 from opc_scanner import OPCScanner
+from frontend.indication_row import IndicationRow
 from frontend.styling import MAIN_WIDTH, style_args
 from frontend.gui_logger import gui_log_formatter, GuiHandler
 
@@ -26,7 +26,7 @@ def scan_opc(run_freq, window, conn_cfg, logger, interlock):
         for comp in interlock.components:
             for indication in comp.indications:
                 dp = opc.get_datapoint(indication.path)
-                window.write_event_value('-DP-', (indication, dp))
+                window.write_event_value('-DP-', {'indication': indication, 'dp': dp})
 
 
 class Gui:
@@ -48,6 +48,7 @@ class Gui:
             sg.popup_error(f"Failed to load configuration - program must exit. Details:\n{error_status}")
             sys.exit()
 
+        self.indication_rows = {}
         self.layout = self.build_layout()
         self.window = sg.Window('Interlock Visualizer', self.layout, finalize=True)
         self.logger = self.configure_logger()
@@ -69,52 +70,15 @@ class Gui:
                 sg.Text(text=f"({comp.desc})", key=comp.desc, **style_args(comp, 'desc'))
             ])
             for indication in comp.indications:
-                ilock_rows.append(self.build_indication_row(indication))
+                ind_row = IndicationRow(indication)
+                self.indication_rows[indication] = ind_row  # For easy access later during update cycle
+                ilock_rows.append(ind_row)
 
         return [
             *ilock_rows,
             [sg.Multiline(size=(MAIN_WIDTH*2, 26), key='-ML-', autoscroll=True)],
             [sg.Button('Exit')],
         ]
-
-    def build_indication_row(self, indication):
-        """
-        Core element of this project - this displays condensed info about interlock indication (will need to become a
-        more full-featured object at some point, probably a custom PySimpleGUI Element).
-
-        For now I just want to demonstrate live-updating GUI elements from OPC-scanning thread.
-        """
-        # May be better leave contents of these blank until first OPCScanner run, OR to run a full scan before layout
-        name = sg.Text(text=indication.path, key=f"{indication.path}_name")
-        pre_val_status = sg.Text(text="?????", key=f"{indication.path}_pre_val_status")
-        post_val_status = sg.Text(text="?????", key=f"{indication.path}_post_val_status")
-        return [name, pre_val_status, post_val_status]
-
-    def update_elements(self, ilock_item, dp):
-        """Determine type of element(s) to update; locate elements by key and give new contents, etc."""
-        elems = {  # Clunky way to associate GUI elements with expected values for comparison with DP; fine for now
-            'pre_val_status': {
-                'obj': self.window.FindElement(f"{ilock_item.path}_pre_val_status", silent_on_error=True),
-                'comp_attr': 'expected_val_pre'  # Name of attribute member of ilock_item to compare
-            },
-            'post_val_status': {
-                'obj': self.window.FindElement(f"{ilock_item.path}_post_val_status", silent_on_error=True),
-                'comp_attr': 'expected_val_post'
-            }
-        }
-
-        for k in elems:
-            if elems[k]['obj'] is None:
-                self.logger.error(f"Could not find window element: {ilock_item.path}_{k}")
-                for i in self.window.AllKeysDict:
-                    self.logger.info(i)
-            else:
-                # Determine whether values match pre- and post-trip expectations, update elements:
-                self.logger.debug(f"Updating window element: {ilock_item.path}_{k}")
-                if dp.value == ilock_item.__dict__[elems[k]['comp_attr']]:
-                    elems[k]['obj'].Update("True")
-                else:
-                    elems[k]['obj'].update("False")
 
     def run(self):
         threading.Thread(
@@ -132,7 +96,7 @@ class Gui:
                 sg.cprint(values[event])
             elif event == '-DP-':  # DataPoint collected - update relevant GUI elements
                 try:
-                    self.update_elements(values[event][0], values[event][1])
+                    self.indication_rows[values[event]['indication']].update(values[event]['dp'], self.logger)
                 except IndexError as e:
                     self.logger.exception(e)
             else:
